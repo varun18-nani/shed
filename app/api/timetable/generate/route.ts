@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateTimetable } from "@/lib/timetable/generator";
+import { scoreTimetable, ScoringEntry } from "@/lib/timetable/scoring";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { departmentId, semester, sectionId, academicYear } = body;
+    const { departmentId, semester, sectionId, academicYear, preview } = body;
 
     // 1. Validate inputs
     if (!departmentId || !semester || !sectionId || !academicYear) {
@@ -83,7 +84,87 @@ export async function POST(request: Request) {
       }, { status: 409 });
     }
 
-    // 4. Database Transaction
+    // Fetch related details for scoring & display
+    const [subjectsMap, facultyMap, roomsMap, timeSlotsMap] = await Promise.all([
+      prisma.subject.findMany({ where: { departmentId, semester: semesterNum } }),
+      prisma.faculty.findMany({
+        where: { departmentId },
+        include: { user: { select: { firstName: true, lastName: true } } }
+      }),
+      prisma.room.findMany(),
+      prisma.timeSlot.findMany()
+    ]);
+
+    const sMap = new Map(subjectsMap.map(s => [s.id, s]));
+    const fMap = new Map(facultyMap.map(f => [f.id, f]));
+    const rMap = new Map(roomsMap.map(r => [r.id, r]));
+    const tMap = new Map(timeSlotsMap.map(t => [t.id, t]));
+
+    // Prepare scoring entries
+    const scoringEntries: ScoringEntry[] = generatorResult.entries.map((entry) => {
+      const slot = tMap.get(entry.timeSlotId);
+      const room = rMap.get(entry.roomId);
+      const subject = sMap.get(entry.subjectId);
+      return {
+        subjectId: entry.subjectId,
+        subjectName: subject?.name,
+        facultyId: entry.facultyId,
+        roomId: entry.roomId,
+        timeSlotId: entry.timeSlotId,
+        dayOfWeek: slot ? slot.dayOfWeek : 1,
+        startTime: slot ? slot.startTime : "09:00",
+        endTime: slot ? slot.endTime : "10:00",
+        roomCapacity: room?.capacity,
+        sectionCapacity: section.capacity || undefined
+      };
+    });
+
+    const qualityAssessment = scoreTimetable(scoringEntries);
+
+    // Format entries for preview / response
+    const formattedEntries = generatorResult.entries.map((entry) => {
+      const subject = sMap.get(entry.subjectId);
+      const faculty = fMap.get(entry.facultyId);
+      const room = rMap.get(entry.roomId);
+      const slot = tMap.get(entry.timeSlotId);
+
+      return {
+        id: `preview_${entry.timeSlotId}_${entry.subjectId}`,
+        subjectId: entry.subjectId,
+        facultyId: entry.facultyId,
+        roomId: entry.roomId,
+        timeSlotId: entry.timeSlotId,
+        sectionId: entry.sectionId,
+        academicYear: entry.academicYear,
+        status: "DRAFT",
+        subject: { code: subject?.code || "", name: subject?.name || "", credits: subject?.credits || 0 },
+        faculty: {
+          id: entry.facultyId,
+          employeeId: faculty?.employeeId || "",
+          user: { firstName: faculty?.user.firstName || "", lastName: faculty?.user.lastName || "" }
+        },
+        room: { id: entry.roomId, roomNumber: room?.roomNumber || "", building: room?.building || "", type: room?.type || "CLASSROOM" },
+        timeSlot: { id: entry.timeSlotId, dayOfWeek: slot?.dayOfWeek || 1, startTime: slot?.startTime || "", endTime: slot?.endTime || "" }
+      };
+    });
+
+    // 4. Handle Preview Mode (Do NOT write to database)
+    if (preview === true) {
+      return NextResponse.json({
+        success: true,
+        preview: true,
+        message: "Timetable preview generated successfully.",
+        sectionId,
+        academicYear,
+        entriesCount: formattedEntries.length,
+        qualityScore: qualityAssessment.qualityScore,
+        qualityBreakdown: qualityAssessment.breakdown,
+        recommendations: qualityAssessment.recommendations,
+        entries: formattedEntries
+      }, { status: 200 });
+    }
+
+    // 5. Database Transaction (Save as DRAFT)
     const entriesToCreate = generatorResult.entries.map((entry) => ({
       subjectId: entry.subjectId,
       facultyId: entry.facultyId,
@@ -98,16 +179,15 @@ export async function POST(request: Request) {
     let createdEntries;
     try {
       createdEntries = await prisma.$transaction(async (tx) => {
-        // Use createMany for efficiency, then fetch back with includes
         await tx.timetableEntry.createMany({ data: entriesToCreate });
 
         return tx.timetableEntry.findMany({
           where: { sectionId, academicYear },
           include: {
-            subject: { select: { code: true, name: true } },
-            faculty: { select: { user: { select: { firstName: true, lastName: true } } } },
-            room: { select: { roomNumber: true } },
-            timeSlot: { select: { dayOfWeek: true, startTime: true, endTime: true } }
+            subject: { select: { code: true, name: true, credits: true } },
+            faculty: { select: { id: true, employeeId: true, user: { select: { firstName: true, lastName: true } } } },
+            room: { select: { id: true, roomNumber: true, building: true, type: true } },
+            timeSlot: { select: { id: true, dayOfWeek: true, startTime: true, endTime: true } }
           },
           orderBy: [
             { timeSlot: { dayOfWeek: "asc" } },
@@ -122,10 +202,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      preview: false,
       message: "Timetable generated successfully.",
       sectionId,
       academicYear,
       entriesCreated: createdEntries.length,
+      qualityScore: qualityAssessment.qualityScore,
+      qualityBreakdown: qualityAssessment.breakdown,
+      recommendations: qualityAssessment.recommendations,
       entries: createdEntries
     }, { status: 201 });
 

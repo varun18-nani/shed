@@ -203,9 +203,18 @@ export default function TimetablePage() {
     setGenResult(null);
   };
 
+  // Preview state
+  const [previewData, setPreviewData] = useState<{
+    qualityScore?: number;
+    qualityBreakdown?: any;
+    recommendations?: string[];
+    entries?: any[];
+  } | null>(null);
+
   // ── Trigger Automatic Timetable Generation ───
-  async function handleGenerateTimetable() {
+  async function handleGenerateTimetable(previewMode: boolean = false) {
     setGenResult(null);
+    if (!previewMode) setPreviewData(null);
     setError("");
 
     if (!genDeptId) {
@@ -236,15 +245,32 @@ export default function TimetablePage() {
           semester: Number(genSemester),
           sectionId: genSectionId,
           academicYear: genAcademicYear.trim(),
+          preview: previewMode,
         }),
       });
 
       const data = await res.json();
 
-      if (res.status === 201 && data.success) {
+      if (previewMode && res.ok && data.success) {
+        setPreviewData({
+          qualityScore: data.qualityScore,
+          qualityBreakdown: data.qualityBreakdown,
+          recommendations: data.recommendations,
+          entries: data.entries,
+        });
         setGenResult({
           success: true,
-          message: `Timetable generated successfully — ${data.entriesCreated} periods created.`,
+          message: `Preview generated successfully. Quality Score: ${data.qualityScore}/100. ${data.entriesCount} periods mapped.`,
+        });
+      } else if (res.status === 201 && data.success) {
+        setPreviewData({
+          qualityScore: data.qualityScore,
+          qualityBreakdown: data.qualityBreakdown,
+          recommendations: data.recommendations,
+        });
+        setGenResult({
+          success: true,
+          message: `Timetable generated & saved successfully — ${data.entriesCreated} periods created (Quality Score: ${data.qualityScore || "N/A"}/100).`,
         });
         const entriesRes = await fetch("/api/timetable");
         if (entriesRes.ok) setEntries(await entriesRes.json());
@@ -335,14 +361,17 @@ export default function TimetablePage() {
 
   // ── Filtered Timetable Entries ───────────────
   const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
+    // If preview entries are active, display preview entries
+    const sourceEntries = previewData?.entries && previewData.entries.length > 0 ? previewData.entries : entries;
+
+    return sourceEntries.filter((entry) => {
       const q = search.toLowerCase().trim();
       const matchesSearch =
         !q ||
         entry.subject.code.toLowerCase().includes(q) ||
         entry.subject.name.toLowerCase().includes(q) ||
-        entry.faculty.firstName.toLowerCase().includes(q) ||
-        entry.faculty.lastName.toLowerCase().includes(q) ||
+        entry.faculty.firstName?.toLowerCase().includes(q) ||
+        entry.faculty.lastName?.toLowerCase().includes(q) ||
         entry.room.roomNumber.toLowerCase().includes(q) ||
         entry.room.building.toLowerCase().includes(q) ||
         (entry.section?.name.toLowerCase().includes(q) ?? false);
@@ -353,7 +382,7 @@ export default function TimetablePage() {
         departments.find((d) => d.id === filterDept)?.name === entry.section?.department;
 
       const matchesSemester =
-        !filterSemester || entry.section?.semester.toString() === filterSemester;
+        !filterSemester || entry.section?.semester?.toString() === filterSemester;
 
       const matchesSection = !filterSection || entry.section?.id === filterSection;
 
@@ -378,6 +407,7 @@ export default function TimetablePage() {
     });
   }, [
     entries,
+    previewData,
     search,
     filterDept,
     filterSemester,
@@ -1011,47 +1041,140 @@ export default function TimetablePage() {
               </div>
             </div>
 
-            {/* GENERATE BUTTON */}
+            {/* GENERATE & PREVIEW BUTTONS */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
               <div className="text-xs text-slate-400">
-                Generated entries will be created in <span className="text-yellow-400 font-semibold">DRAFT</span> status.
+                You can <span className="text-cyan-400 font-semibold">Preview</span> the schedule & quality score first, or directly generate <span className="text-yellow-400 font-semibold">DRAFT</span> entries.
               </div>
-              <button
-                onClick={handleGenerateTimetable}
-                disabled={isGenerating || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:opacity-90 font-semibold text-sm shadow-lg shadow-cyan-500/20 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white"
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw size={16} className="animate-spin text-white" />
-                    <span>Generating timetable...</span>
-                  </>
-                ) : (
-                  <>
-                    <Wand2 size={16} />
-                    <span>Generate Timetable</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  onClick={() => handleGenerateTimetable(true)}
+                  disabled={isGenerating || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-cyan-500/30 text-cyan-300 font-semibold text-sm shadow-md transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Sparkles size={16} className="text-cyan-400" />
+                  <span>Preview & Score</span>
+                </button>
+                <button
+                  onClick={() => handleGenerateTimetable(false)}
+                  disabled={isGenerating || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:opacity-90 font-semibold text-sm shadow-lg shadow-cyan-500/20 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin text-white" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 size={16} />
+                      <span>Generate & Save</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* GENERATOR RESULT DISPLAY */}
             {genResult && (
               <div className="mt-5">
                 {genResult.success ? (
-                  <div className="p-4 rounded-xl border border-green-500/30 bg-green-500/10 text-green-400 flex items-start justify-between text-sm">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle2 size={20} className="shrink-0 text-green-400" />
-                      <div>
-                        <div className="font-semibold">{genResult.message}</div>
-                        <div className="text-xs text-green-500 mt-0.5">
-                          View updated schedule in the timetable below.
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-xl border border-green-500/30 bg-green-500/10 text-green-400 flex items-start justify-between text-sm">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 size={20} className="shrink-0 text-green-400" />
+                        <div>
+                          <div className="font-semibold">{genResult.message}</div>
+                          <div className="text-xs text-green-500 mt-0.5">
+                            {previewData?.entries
+                              ? "Preview active. Click 'Generate & Save' above to persist into database as DRAFT."
+                              : "View updated schedule in the timetable below."}
+                          </div>
                         </div>
                       </div>
+                      <button onClick={() => { setGenResult(null); setPreviewData(null); }} className="text-green-500 hover:text-green-300">
+                        <X size={16} />
+                      </button>
                     </div>
-                    <button onClick={() => setGenResult(null)} className="text-green-500 hover:text-green-300">
-                      <X size={16} />
-                    </button>
+
+                    {/* QUALITY SCORE & RECOMMENDATIONS DISPLAY */}
+                    {previewData && (
+                      <div className="bg-slate-950 border border-white/10 rounded-xl p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="text-cyan-400" size={18} />
+                            <span className="font-bold text-white text-sm">Timetable Quality Assessment</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400">Score:</span>
+                            <span
+                              className={`text-base font-extrabold font-mono px-2.5 py-0.5 rounded-lg border ${
+                                (previewData.qualityScore ?? 0) >= 80
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                  : (previewData.qualityScore ?? 0) >= 60
+                                  ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                                  : "bg-red-500/10 text-red-400 border-red-500/30"
+                              }`}
+                            >
+                              {previewData.qualityScore ?? 0}/100
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Breakdown Metrics */}
+                        {previewData.qualityBreakdown && (
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                            <div className="p-2.5 rounded-lg bg-slate-900 border border-white/5">
+                              <span className="text-slate-400 block text-[11px]">Day Spread</span>
+                              <span className="font-bold text-slate-200 mt-1 block">
+                                {previewData.qualityBreakdown.dayDistribution}/25
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-slate-900 border border-white/5">
+                              <span className="text-slate-400 block text-[11px]">Subject Balance</span>
+                              <span className="font-bold text-slate-200 mt-1 block">
+                                {previewData.qualityBreakdown.workloadBalance}/25
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-slate-900 border border-white/5">
+                              <span className="text-slate-400 block text-[11px]">Gap Efficiency</span>
+                              <span className="font-bold text-slate-200 mt-1 block">
+                                {previewData.qualityBreakdown.gapPenalty}/20
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-slate-900 border border-white/5">
+                              <span className="text-slate-400 block text-[11px]">Room Utilization</span>
+                              <span className="font-bold text-slate-200 mt-1 block">
+                                {previewData.qualityBreakdown.roomUtilization}/15
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-slate-900 border border-white/5">
+                              <span className="text-slate-400 block text-[11px]">Consecutive Load</span>
+                              <span className="font-bold text-slate-200 mt-1 block">
+                                {previewData.qualityBreakdown.consecutivePenalty}/15
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Smart Recommendations */}
+                        {previewData.recommendations && previewData.recommendations.length > 0 && (
+                          <div className="pt-2 border-t border-white/5 space-y-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+                              Smart Optimization Recommendations
+                            </span>
+                            <ul className="space-y-1 text-xs text-slate-300">
+                              {previewData.recommendations.map((rec, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                  <span className="text-cyan-400 font-bold">&bull;</span>
+                                  <span>{rec}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : genResult.existing ? (
                   <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm">

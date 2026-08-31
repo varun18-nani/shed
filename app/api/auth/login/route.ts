@@ -3,8 +3,30 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../../../../lib/prisma";
 import { signToken } from "../../../../lib/auth";
 import { cookies } from "next/headers";
+import { checkRateLimit, getRequestIp } from "../../../../lib/rate-limit";
 
 export async function POST(request: Request) {
+  // Rate limiting: max 10 login attempts per IP per minute, block for 5 minutes
+  const ip = getRequestIp(request);
+  const rateLimitResult = checkRateLimit(`login:${ip}`, {
+    maxRequests: 10,
+    windowMs: 60_000,
+    blockDurationMs: 300_000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    const retryAfterSec = Math.ceil((rateLimitResult.retryAfterMs ?? 300_000) / 1000);
+    return NextResponse.json(
+      { error: "Too many login attempts. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfterSec),
+        },
+      }
+    );
+  }
+
   try {
     const body = await request.json();
 

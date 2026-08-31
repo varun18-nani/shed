@@ -5,10 +5,26 @@ import { jwtVerify } from "jose";
 const getSecret = () => {
   const secret = process.env.AUTH_SECRET || process.env.JWT_SECRET;
   if (!secret) {
-    return new TextEncoder().encode("fallback_development_secret_only");
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "AUTH_SECRET environment variable is not set. Cannot operate securely in production."
+      );
+    }
+    return new TextEncoder().encode("schedai_dev_only_fallback_do_not_use_in_production");
   }
   return new TextEncoder().encode(secret);
 };
+
+function addSecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+  );
+  return response;
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -20,7 +36,8 @@ export async function middleware(request: NextRequest) {
   const isProtectedApi = pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/");
 
   if (!isAdminPath && !isFacultyPath && !isStudentPath && !isProtectedApi) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    return addSecurityHeaders(response);
   }
 
   const sessionCookie = request.cookies.get("session")?.value;
@@ -28,7 +45,9 @@ export async function middleware(request: NextRequest) {
   // No session token -> redirect to login (or 401 for APIs)
   if (!sessionCookie) {
     if (isProtectedApi) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return addSecurityHeaders(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      );
     }
     return NextResponse.redirect(new URL("/login", request.url));
   }
@@ -37,10 +56,12 @@ export async function middleware(request: NextRequest) {
   try {
     const verified = await jwtVerify(sessionCookie, getSecret());
     payload = verified.payload;
-  } catch (err) {
+  } catch {
     // Invalid token -> redirect to login (or 401 for APIs)
     if (isProtectedApi) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return addSecurityHeaders(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      );
     }
     const response = NextResponse.redirect(new URL("/login", request.url));
     response.cookies.delete("session");
@@ -60,20 +81,28 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(getDashboardPath(role), request.url));
   }
 
-  // API protection
+  // API protection: POST/PUT/PATCH/DELETE require ADMIN role
+  // Exception: faculty/student portal APIs handle their own fine-grained authorization
   if (isProtectedApi) {
-    // Only allow GET requests for non-admins, unless it's a specific route?
-    // Wait, the requirement says: "POST and DELETE must require an authenticated ADMIN session."
-    // "Do not allow FACULTY or STUDENT to perform admin CRUD operations."
-    
-    // For now, let's allow all GETs to pass if authenticated (as UI might need them).
-    // For POST/DELETE/PUT/PATCH, enforce ADMIN role.
-    if (request.method !== "GET" && role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
+    const isFacultyOrStudentPortalApi =
+      pathname.startsWith("/api/faculty/") ||
+      pathname.startsWith("/api/student/") ||
+      pathname.startsWith("/api/dashboard/faculty") ||
+      pathname.startsWith("/api/dashboard/student");
+
+    if (
+      request.method !== "GET" &&
+      role !== "ADMIN" &&
+      !isFacultyOrStudentPortalApi
+    ) {
+      return addSecurityHeaders(
+        NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 })
+      );
     }
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  return addSecurityHeaders(response);
 }
 
 function getDashboardPath(role: unknown): string {
