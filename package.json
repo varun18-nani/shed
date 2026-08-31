@@ -7,7 +7,18 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx scripts/seed-admin.ts",
+    "test:generator": "tsx scripts/test-generator.ts",
+    "test:publishing": "tsx scripts/test-publishing.ts",
+    "test:portals": "tsx scripts/test-portal-timetable.ts",
+    "test:dashboard": "tsx scripts/test-dashboard.ts",
+    "test:all": "tsx scripts/test-generator.ts && tsx scripts/test-publishing.ts && tsx scripts/test-portal-timetable.ts && tsx scripts/test-dashboard.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",
