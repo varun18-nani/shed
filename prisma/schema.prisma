@@ -1,0 +1,197 @@
+// SchedAI Database Schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  FACULTY
+  STUDENT
+}
+
+enum RoomType {
+  CLASSROOM
+  COMPUTER_LAB
+  LABORATORY
+  SEMINAR_HALL
+  AUDITORIUM
+}
+
+enum RoomStatus {
+  AVAILABLE
+  MAINTENANCE
+  UNAVAILABLE
+}
+
+enum TimetableStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  firstName    String
+  lastName     String
+  phone        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  faculty Faculty?
+  student Student?
+
+  @@index([role])
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  code      String   @unique
+  createdAt DateTime @default(now())
+
+  faculty  Faculty[]
+  students Student[]
+  subjects Subject[]
+  sections Section[]
+  rooms    Room[]
+}
+
+model Faculty {
+  id           String   @id @default(cuid())
+  employeeId   String   @unique
+  designation  String?
+  departmentId String
+  userId       String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department       @relation(fields: [departmentId], references: [id])
+  subjects   Subject[]
+  timetable  TimetableEntry[]
+
+  @@index([departmentId])
+}
+
+model Student {
+  id           String   @id @default(cuid())
+  rollNumber   String   @unique
+  departmentId String
+  sectionId    String?
+  userId       String   @unique
+  semester     Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department       @relation(fields: [departmentId], references: [id])
+  section    Section?         @relation(fields: [sectionId], references: [id])
+  timetable  TimetableEntry[]
+
+  @@index([departmentId])
+  @@index([sectionId])
+}
+
+model Section {
+  id           String   @id @default(cuid())
+  name         String
+  semester     Int
+  departmentId String
+  capacity     Int?
+  createdAt    DateTime @default(now())
+
+  department Department       @relation(fields: [departmentId], references: [id])
+  students   Student[]
+  timetable  TimetableEntry[]
+
+  @@unique([name, semester, departmentId])
+  @@index([departmentId])
+}
+
+model Subject {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  credits      Int
+  semester     Int
+  departmentId String
+  facultyId    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department Department       @relation(fields: [departmentId], references: [id])
+  faculty    Faculty?         @relation(fields: [facultyId], references: [id])
+  timetable  TimetableEntry[]
+
+  @@index([departmentId])
+  @@index([facultyId])
+  @@index([semester])
+}
+
+model Room {
+  id           String     @id @default(cuid())
+  roomNumber   String
+  building     String
+  type         RoomType
+  capacity     Int
+  status       RoomStatus @default(AVAILABLE)
+  departmentId String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  department Department?      @relation(fields: [departmentId], references: [id])
+  timetable  TimetableEntry[]
+
+  @@unique([roomNumber, building])
+  @@index([departmentId])
+}
+
+model TimeSlot {
+  id        String   @id @default(cuid())
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+
+  timetable TimetableEntry[]
+
+  @@unique([dayOfWeek, startTime, endTime])
+}
+
+model TimetableEntry {
+  id           String          @id @default(cuid())
+  subjectId    String
+  facultyId    String
+  roomId       String
+  timeSlotId   String
+  sectionId    String?
+  studentId    String?
+  status       TimetableStatus @default(DRAFT)
+  academicYear String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  subject  Subject  @relation(fields: [subjectId], references: [id])
+  faculty  Faculty  @relation(fields: [facultyId], references: [id])
+  room     Room     @relation(fields: [roomId], references: [id])
+  timeSlot TimeSlot @relation(fields: [timeSlotId], references: [id])
+  section  Section? @relation(fields: [sectionId], references: [id])
+  student  Student? @relation(fields: [studentId], references: [id])
+
+  @@index([subjectId])
+  @@index([facultyId])
+  @@index([roomId])
+  @@index([timeSlotId])
+  @@index([sectionId])
+  @@index([academicYear])
+}
