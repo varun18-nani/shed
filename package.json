@@ -18,7 +18,10 @@
     "test:publishing": "tsx scripts/test-publishing.ts",
     "test:security": "tsx scripts/test-security.ts",
     "test:intelligence": "tsx scripts/test-timetable-intelligence.ts",
-    "test:all": "tsx scripts/test-generator.ts && tsx scripts/test-publishing.ts && tsx scripts/test-portal-timetable.ts && tsx scripts/test-dashboard.ts && tsx scripts/test-security.ts && tsx scripts/test-timetable-intelligence.ts"
+    "test:optimization": "tsx scripts/test-optimization.ts",
+    "test:health": "tsx scripts/test-health.ts",
+    "check:production": "tsx scripts/check-production.ts",
+    "test:all": "tsx scripts/test-generator.ts && tsx scripts/test-publishing.ts && tsx scripts/test-portal-timetable.ts && tsx scripts/test-dashboard.ts && tsx scripts/test-security.ts && tsx scripts/test-timetable-intelligence.ts && tsx scripts/test-optimization.ts && tsx scripts/test-health.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",

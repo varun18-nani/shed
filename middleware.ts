@@ -33,10 +33,16 @@ export async function middleware(request: NextRequest) {
   const isAdminPath = pathname.startsWith("/admin");
   const isFacultyPath = pathname.startsWith("/faculty");
   const isStudentPath = pathname.startsWith("/student");
-  const isProtectedApi = pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/");
+  const isProtectedApi =
+    pathname.startsWith("/api/") &&
+    !pathname.startsWith("/api/auth/") &&
+    !pathname.startsWith("/api/health");
+
+  const requestId = request.headers.get("x-request-id") || `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
 
   if (!isAdminPath && !isFacultyPath && !isStudentPath && !isProtectedApi) {
     const response = NextResponse.next();
+    response.headers.set("X-Request-ID", requestId);
     return addSecurityHeaders(response);
   }
 

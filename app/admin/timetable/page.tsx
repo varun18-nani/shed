@@ -211,6 +211,138 @@ export default function TimetablePage() {
     entries?: any[];
   } | null>(null);
 
+  // Phase 12 Optimization & Regeneration State
+  const [candidates, setCandidates] = useState<any[]>([]);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isApplyingCandidate, setIsApplyingCandidate] = useState(false);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [regenerateModal, setRegenerateModal] = useState<{
+    sectionId: string;
+    academicYear: string;
+    sectionName: string;
+  } | null>(null);
+
+  // ── Optimization: Generate Multiple Candidates ───
+  async function handleOptimizeTimetable(allowDraftReplace: boolean = false) {
+    setGenResult(null);
+    setPreviewData(null);
+    setCandidates([]);
+    setSelectedCandidateId(null);
+    setError("");
+
+    if (!genDeptId) {
+      setError("Please select a department for optimization.");
+      return;
+    }
+    if (!genSemester) {
+      setError("Please select a semester for optimization.");
+      return;
+    }
+    if (!genSectionId) {
+      setError("Please select a section for optimization.");
+      return;
+    }
+    if (!genAcademicYear.trim()) {
+      setError("Please enter a valid academic year (e.g. 2026-27).");
+      return;
+    }
+
+    setIsOptimizing(true);
+
+    try {
+      const res = await fetch("/api/timetable/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          departmentId: genDeptId,
+          semester: Number(genSemester),
+          sectionId: genSectionId,
+          academicYear: genAcademicYear.trim(),
+          candidateCount: 4,
+          allowExistingDraft: allowDraftReplace,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success && data.candidates?.length > 0) {
+        setCandidates(data.candidates);
+        setSelectedCandidateId(data.candidates[0].id);
+        setPreviewData({
+          qualityScore: data.candidates[0].qualityScore,
+          qualityBreakdown: data.candidates[0].breakdown,
+          recommendations: data.candidates[0].recommendations,
+          entries: data.candidates[0].entries,
+        });
+        setGenResult({
+          success: true,
+          message: `Generated ${data.candidateCount} candidate schedules! Best Quality Score: ${data.bestScore}/100. Inspect and select your preferred schedule below.`,
+        });
+      } else if (res.status === 409 && data.diagnostics?.status === "DRAFT") {
+        setRegenerateModal({
+          sectionId: genSectionId,
+          academicYear: genAcademicYear.trim(),
+          sectionName: sections.find((s) => s.id === genSectionId)?.name || "Selected Section",
+        });
+      } else {
+        setGenResult({
+          success: false,
+          message: data.error || "Optimization could not find valid candidate schedules.",
+          diagnostics: data.diagnostics,
+        });
+      }
+    } catch (err: any) {
+      setGenResult({
+        success: false,
+        message: err.message || "A network error occurred during optimization.",
+      });
+    } finally {
+      setIsOptimizing(false);
+    }
+  }
+
+  // ── Apply/Save Selected Candidate ───
+  async function handleApplyCandidate(candidate: any) {
+    if (!candidate) return;
+    setIsApplyingCandidate(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/timetable/optimize/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId: genSectionId,
+          academicYear: genAcademicYear.trim(),
+          candidateId: candidate.id,
+          entries: candidate.entries.map((e: any) => ({
+            subjectId: e.subjectId,
+            facultyId: e.facultyId,
+            roomId: e.roomId,
+            timeSlotId: e.timeSlotId,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSuccess(`Candidate #${candidate.candidateIndex} (${candidate.strategyName}) saved as official DRAFT timetable!`);
+        setCandidates([]);
+        setPreviewData(null);
+        setGenResult(null);
+        const entriesRes = await fetch("/api/timetable");
+        if (entriesRes.ok) setEntries(await entriesRes.json());
+      } else {
+        setError(data.error || "Failed to save candidate timetable.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to apply candidate schedule.");
+    } finally {
+      setIsApplyingCandidate(false);
+    }
+  }
+
   // ── Trigger Automatic Timetable Generation ───
   async function handleGenerateTimetable(previewMode: boolean = false) {
     setGenResult(null);
@@ -872,48 +1004,75 @@ export default function TimetablePage() {
               </div>
 
               {/* Action Buttons based on lifecycle status */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 {sectionLifecycleState.overallStatus === "DRAFT" && (
-                  <button
-                    onClick={() =>
-                      setConfirmModal({
-                        type: "publish",
-                        sectionId: sectionLifecycleState.sectionId,
-                        sectionName: sectionLifecycleState.sectionName,
-                        academicYear: sectionLifecycleState.academicYear,
-                        count: sectionLifecycleState.count,
-                      })
-                    }
-                    disabled={isPublishing}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 font-semibold text-xs text-white shadow-lg shadow-emerald-500/20 transition active:scale-95"
-                  >
-                    <Send size={15} />
-                    <span>Publish Timetable</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => {
+                        const sec = sections.find((s) => s.id === sectionLifecycleState.sectionId);
+                        if (sec) {
+                          setGenDeptId(sec.departmentId);
+                          setGenSemester(sec.semester);
+                          setGenSectionId(sec.id);
+                          setGenAcademicYear(sectionLifecycleState.academicYear);
+                        }
+                        setRegenerateModal({
+                          sectionId: sectionLifecycleState.sectionId,
+                          academicYear: sectionLifecycleState.academicYear,
+                          sectionName: sectionLifecycleState.sectionName,
+                        });
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 font-semibold text-xs text-purple-300 transition active:scale-95"
+                    >
+                      <RefreshCw size={13} className="text-purple-400" />
+                      <span>Regenerate Draft</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setConfirmModal({
+                          type: "publish",
+                          sectionId: sectionLifecycleState.sectionId,
+                          sectionName: sectionLifecycleState.sectionName,
+                          academicYear: sectionLifecycleState.academicYear,
+                          count: sectionLifecycleState.count,
+                        })
+                      }
+                      disabled={isPublishing}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 font-semibold text-xs text-white shadow-lg shadow-emerald-500/20 transition active:scale-95"
+                    >
+                      <Send size={15} />
+                      <span>Publish Timetable</span>
+                    </button>
+                  </>
                 )}
 
                 {sectionLifecycleState.overallStatus === "PUBLISHED" && (
-                  <button
-                    onClick={() =>
-                      setConfirmModal({
-                        type: "archive",
-                        sectionId: sectionLifecycleState.sectionId,
-                        sectionName: sectionLifecycleState.sectionName,
-                        academicYear: sectionLifecycleState.academicYear,
-                        count: sectionLifecycleState.count,
-                      })
-                    }
-                    disabled={isArchiving}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-slate-700 to-slate-800 hover:bg-slate-700 border border-white/10 font-semibold text-xs text-slate-200 transition active:scale-95"
-                  >
-                    <Archive size={15} className="text-slate-400" />
-                    <span>Archive Timetable</span>
-                  </button>
+                  <>
+                    <span className="text-[11px] text-slate-400 mr-1 italic">
+                      Published timetable cannot be regenerated.
+                    </span>
+                    <button
+                      onClick={() =>
+                        setConfirmModal({
+                          type: "archive",
+                          sectionId: sectionLifecycleState.sectionId,
+                          sectionName: sectionLifecycleState.sectionName,
+                          academicYear: sectionLifecycleState.academicYear,
+                          count: sectionLifecycleState.count,
+                        })
+                      }
+                      disabled={isArchiving}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-slate-700 to-slate-800 hover:bg-slate-700 border border-white/10 font-semibold text-xs text-slate-200 transition active:scale-95"
+                    >
+                      <Archive size={15} className="text-slate-400" />
+                      <span>Archive Timetable</span>
+                    </button>
+                  </>
                 )}
 
                 {sectionLifecycleState.overallStatus === "ARCHIVED" && (
                   <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold text-slate-400 cursor-not-allowed">
-                    <Archive size={14} /> Archived Schedule
+                    <Archive size={14} /> Archived (Cannot be regenerated)
                   </span>
                 )}
 
@@ -1041,33 +1200,50 @@ export default function TimetablePage() {
               </div>
             </div>
 
-            {/* GENERATE & PREVIEW BUTTONS */}
+            {/* GENERATE & OPTIMIZE BUTTONS */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
               <div className="text-xs text-slate-400">
-                You can <span className="text-cyan-400 font-semibold">Preview</span> the schedule & quality score first, or directly generate <span className="text-yellow-400 font-semibold">DRAFT</span> entries.
+                You can <span className="text-cyan-400 font-semibold">Preview</span>, compare <span className="text-purple-400 font-semibold">Multiple Candidates</span>, or directly generate <span className="text-yellow-400 font-semibold">DRAFT</span> entries.
               </div>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
                 <button
                   onClick={() => handleGenerateTimetable(true)}
-                  disabled={isGenerating || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-cyan-500/30 text-cyan-300 font-semibold text-sm shadow-md transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled={isGenerating || isOptimizing || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-cyan-500/30 text-cyan-300 font-semibold text-xs shadow-md transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Sparkles size={16} className="text-cyan-400" />
-                  <span>Preview & Score</span>
+                  <Sparkles size={14} className="text-cyan-400" />
+                  <span>Preview</span>
+                </button>
+                <button
+                  onClick={() => handleOptimizeTimetable(false)}
+                  disabled={isGenerating || isOptimizing || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 text-purple-300 font-semibold text-xs shadow-md transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isOptimizing ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-purple-400" />
+                      <span>Optimizing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} className="text-purple-400" />
+                      <span>Optimize & Compare</span>
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => handleGenerateTimetable(false)}
-                  disabled={isGenerating || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:opacity-90 font-semibold text-sm shadow-lg shadow-cyan-500/20 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+                  disabled={isGenerating || isOptimizing || !genDeptId || !genSemester || !genSectionId || !genAcademicYear.trim()}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:opacity-90 font-semibold text-xs shadow-lg shadow-cyan-500/20 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white"
                 >
                   {isGenerating ? (
                     <>
-                      <RefreshCw size={16} className="animate-spin text-white" />
+                      <RefreshCw size={14} className="animate-spin text-white" />
                       <span>Processing...</span>
                     </>
                   ) : (
                     <>
-                      <Wand2 size={16} />
+                      <Wand2 size={14} />
                       <span>Generate & Save</span>
                     </>
                   )}
@@ -1096,6 +1272,93 @@ export default function TimetablePage() {
                         <X size={16} />
                       </button>
                     </div>
+
+                    {/* CANDIDATES COMPARISON & SELECTION SECTION */}
+                    {candidates.length > 0 && (
+                      <div className="bg-slate-950/80 border border-purple-500/30 rounded-xl p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="text-purple-400" size={18} />
+                            <span className="font-bold text-white text-sm">Optimization Candidates ({candidates.length} generated)</span>
+                          </div>
+                          <span className="text-xs text-purple-300 font-medium">
+                            Select a candidate to view on grid or save as official DRAFT
+                          </span>
+                        </div>
+
+                        {/* Candidates Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {candidates.map((cand) => {
+                            const isSelected = selectedCandidateId === cand.id;
+                            const isBest = cand.qualityScore === Math.max(...candidates.map((c) => c.qualityScore));
+
+                            return (
+                              <div
+                                key={cand.id}
+                                className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                                  isSelected
+                                    ? "bg-purple-950/40 border-purple-500 shadow-lg shadow-purple-500/10"
+                                    : "bg-slate-900/60 border-white/10 hover:border-white/20"
+                                }`}
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs font-bold text-slate-200">
+                                      Candidate #{cand.candidateIndex}
+                                    </span>
+                                    {isBest && (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                        Best Score
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 font-medium truncate mb-2">
+                                    {cand.strategyName}
+                                  </div>
+                                  <div className="text-2xl font-black font-mono text-purple-300">
+                                    {cand.qualityScore}
+                                    <span className="text-xs text-slate-500 font-normal">/100</span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 mt-2 space-y-0.5">
+                                    <div>Day Spread: {cand.breakdown.dayDistribution}/25</div>
+                                    <div>Subject Balance: {cand.breakdown.workloadBalance}/25</div>
+                                    <div>Gap Efficiency: {cand.breakdown.gapPenalty}/20</div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedCandidateId(cand.id);
+                                      setPreviewData({
+                                        qualityScore: cand.qualityScore,
+                                        qualityBreakdown: cand.breakdown,
+                                        recommendations: cand.recommendations,
+                                        entries: cand.entries,
+                                      });
+                                    }}
+                                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                      isSelected
+                                        ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                                        : "bg-white/5 text-slate-300 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    {isSelected ? "Viewing" : "Preview"}
+                                  </button>
+                                  <button
+                                    onClick={() => handleApplyCandidate(cand)}
+                                    disabled={isApplyingCandidate}
+                                    className="flex-1 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 font-semibold text-xs text-white transition active:scale-95 disabled:opacity-50"
+                                  >
+                                    {isApplyingCandidate ? "Saving..." : "Apply"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* QUALITY SCORE & RECOMMENDATIONS DISPLAY */}
                     {previewData && (
@@ -1949,6 +2212,50 @@ export default function TimetablePage() {
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-semibold hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-50 transition active:scale-95 text-white"
               >
                 {saving ? "Saving..." : editId ? "Save Changes" : "Create Entry"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REGENERATE CONFIRMATION MODAL */}
+      {regenerateModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-purple-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-purple-400">
+              <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                <RefreshCw size={22} className="text-purple-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Regenerate Timetable</h3>
+            </div>
+
+            <p className="text-sm text-slate-300">
+              This will replace the current <span className="text-yellow-400 font-semibold">DRAFT</span> timetable for{" "}
+              <strong className="text-white">Section {regenerateModal.sectionName}</strong> ({regenerateModal.academicYear}).
+            </p>
+
+            <div className="p-3.5 rounded-xl bg-purple-950/40 border border-purple-500/20 text-xs text-purple-300">
+              <span className="font-semibold block mb-1">Safety Policy:</span>
+              Published schedules are never replaced. All current draft periods will be removed and new optimized candidates will be generated for your selection.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRegenerateModal(null)}
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-slate-300 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRegenerateModal(null);
+                  handleOptimizeTimetable(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:opacity-90 font-semibold text-xs text-white shadow-lg shadow-purple-500/20 transition active:scale-95"
+              >
+                Proceed with Regeneration
               </button>
             </div>
           </div>
