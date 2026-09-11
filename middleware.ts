@@ -90,16 +90,17 @@ export async function middleware(request: NextRequest) {
   // API protection: POST/PUT/PATCH/DELETE require ADMIN role
   // Exception: faculty/student portal APIs handle their own fine-grained authorization
   if (isProtectedApi) {
-    const isFacultyOrStudentPortalApi =
+    const isUserSelfServiceApi =
       pathname.startsWith("/api/faculty/") ||
       pathname.startsWith("/api/student/") ||
       pathname.startsWith("/api/dashboard/faculty") ||
-      pathname.startsWith("/api/dashboard/student");
+      pathname.startsWith("/api/dashboard/student") ||
+      pathname.startsWith("/api/notifications");
 
     if (
       request.method !== "GET" &&
       role !== "ADMIN" &&
-      !isFacultyOrStudentPortalApi
+      !isUserSelfServiceApi
     ) {
       return addSecurityHeaders(
         NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 })

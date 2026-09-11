@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/layout/Sidebar";
+import NotificationBell from "@/components/ui/NotificationBell";
 import {
-  Bell,
   Search,
   Building2,
   Users,
@@ -116,7 +116,7 @@ export default function AdminPage() {
             >
               <RefreshCw size={18} className={loading ? "animate-spin text-cyan-400" : ""} />
             </button>
-            <Bell className="text-gray-400 cursor-pointer hover:text-white transition" />
+            <NotificationBell />
             <div className="bg-gradient-to-tr from-cyan-500 to-blue-600 h-10 w-10 rounded-full flex items-center justify-center font-bold shadow-lg shadow-cyan-500/20">
               A
             </div>

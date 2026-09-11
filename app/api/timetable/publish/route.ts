@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { dispatchTimetablePublishedNotification } from "@/lib/notifications";
 
 export async function POST(request: Request) {
   try {
@@ -175,7 +176,7 @@ export async function POST(request: Request) {
       seenSlots.add(entry.timeSlotId);
     }
 
-    // 6. Safe Prisma transaction to update all matching entries to PUBLISHED
+    // 6. Safe Prisma transaction to update all matching entries to PUBLISHED and dispatch notifications
     const result = await prisma.$transaction(async (tx) => {
       const updateResult = await tx.timetableEntry.updateMany({
         where: {
@@ -187,7 +188,18 @@ export async function POST(request: Request) {
           status: "PUBLISHED"
         }
       });
-      return updateResult;
+
+      // Dispatch in-app notifications to assigned faculty and enrolled section students
+      const notificationResult = await dispatchTimetablePublishedNotification({
+        sectionId: trimmedSectionId,
+        academicYear: trimmedAcademicYear,
+        tx,
+      });
+
+      return {
+        updateResult,
+        notificationResult,
+      };
     });
 
     return NextResponse.json({
@@ -196,7 +208,8 @@ export async function POST(request: Request) {
       sectionId: trimmedSectionId,
       sectionName: section.name,
       academicYear: trimmedAcademicYear,
-      publishedCount: result.count
+      publishedCount: result.updateResult.count,
+      notificationsCreated: result.notificationResult.createdNotificationsCount,
     }, { status: 200 });
 
   } catch (error) {

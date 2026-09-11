@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Job 1: Static validation — no database required
+  # ──────────────────────────────────────────────────────────────
+  static-checks:
+    name: TypeScript + Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        env:
+          # A placeholder URL is sufficient for prisma generate (no live DB needed)
+          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+
+      - name: TypeScript type-check
+        run: npx tsc --noEmit
+
+      - name: Production build
+        run: npm run build
+        env:
+          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+          AUTH_SECRET: "ci-placeholder-secret-32-chars-min-ok"
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 2: Integration tests — requires a real PostgreSQL database
+  # Only runs when DATABASE_URL secret is configured in the repo.
+  # ──────────────────────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    # Skip this job if DATABASE_URL secret is not configured
+    if: ${{ secrets.DATABASE_URL != '' }}
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: schedai
+          POSTGRES_PASSWORD: schedai_ci
+          POSTGRES_DB: schedai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://schedai:schedai_ci@localhost:5432/schedai_test' }}
+      AUTH_SECRET: ${{ secrets.AUTH_SECRET || 'ci-integration-test-secret-min-32-chars' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+
+      - name: Seed test data
+        run: npx tsx scripts/seed-test-data.ts
+
+      - name: Run all tests
+        run: npm run test:all

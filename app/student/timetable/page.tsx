@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import NotificationBell from "@/components/ui/NotificationBell";
 
 const DAY_MAPPING: Record<number, string> = {
   1: "Monday",
@@ -235,6 +236,7 @@ export default function StudentTimetablePage() {
             >
               <RefreshCw size={18} className={loading ? "animate-spin text-blue-400" : ""} />
             </button>
+            <NotificationBell />
             <div className="flex items-center gap-3 pl-4 border-l border-white/10">
               <div className="text-right text-xs">
                 <div className="font-bold text-white">{profile?.name || "Student"}</div>

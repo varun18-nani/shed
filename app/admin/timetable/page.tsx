@@ -120,6 +120,7 @@ export default function TimetablePage() {
   // UI status state
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -652,6 +653,42 @@ export default function TimetablePage() {
     window.print();
   };
 
+  // ── Export PDF Handler ───────────────────────
+  const handleExportPDF = async () => {
+    if (!filterSection || !filterYear) {
+      setError("Please filter by a specific Section and Academic Year before exporting PDF.");
+      return;
+    }
+    setIsPdfExporting(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({
+        sectionId: filterSection,
+        academicYear: filterYear,
+      });
+      const res = await fetch(`/api/timetable/export/pdf?${params.toString()}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "PDF generation failed" }));
+        throw new Error(data.error || `PDF export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const sec = sections.find((s) => s.id === filterSection);
+      const filename = `schedai-timetable-${sec?.name || filterSection}-${filterYear}.pdf`;
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message || "Failed to export PDF.");
+    } finally {
+      setIsPdfExporting(false);
+    }
+  };
+
   // ── Manual Modal Dependent Logic ────────────
   const selectedSubject = useMemo(() => subjects.find((s) => s.id === subjectId), [subjects, subjectId]);
 
@@ -883,6 +920,21 @@ export default function TimetablePage() {
               >
                 <Download size={15} className="text-cyan-400" />
                 <span>Export CSV</span>
+              </button>
+
+              {/* Export PDF Button */}
+              <button
+                onClick={handleExportPDF}
+                disabled={isPdfExporting || !filterSection || !filterYear}
+                title={!filterSection || !filterYear ? "Select a Section and Academic Year to export PDF" : "Export published timetable as PDF"}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 hover:text-white font-medium text-xs transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isPdfExporting ? (
+                  <RefreshCw size={15} className="text-rose-400 animate-spin" />
+                ) : (
+                  <Download size={15} className="text-rose-400" />
+                )}
+                <span>{isPdfExporting ? "Generating…" : "Export PDF"}</span>
               </button>
 
               {/* Print Timetable Button */}

@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Calendar,
 } from "lucide-react";
+import NotificationBell from "@/components/ui/NotificationBell";
 
 type FacultyDashboardData = {
   faculty: {
@@ -121,6 +122,7 @@ export default function FacultyPage() {
             >
               <RefreshCw size={18} className={loading ? "animate-spin text-emerald-400" : ""} />
             </button>
+            <NotificationBell />
             <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center font-bold text-sm shadow-md shadow-emerald-500/20">
               {data?.faculty?.name?.charAt(0) || "F"}
             </div>

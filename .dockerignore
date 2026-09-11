@@ -1,0 +1,38 @@
+# ── Version control ──────────────────────────────────────
+.git
+.gitignore
+
+# ── Node dependencies (rebuilt inside Docker) ────────────
+node_modules
+
+# ── Next.js build output (rebuilt inside Docker) ─────────
+.next
+out
+
+# ── Environment / secrets ────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Development tooling ───────────────────────────────────
+.windsurf
+.claude
+.agents
+.gemini
+*.tsbuildinfo
+
+# ── Coverage / logs ───────────────────────────────────────
+coverage
+logs
+*.log
+
+# ── OS artefacts ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor / IDE ──────────────────────────────────────────
+.vscode
+.idea
+
+# ── Temporary / local-only scripts ───────────────────────
+# (prisma/schema.prisma and prisma/migrations ARE needed — do not exclude them)

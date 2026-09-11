@@ -16,6 +16,7 @@ import {
   Calendar,
   Layers,
 } from "lucide-react";
+import NotificationBell from "@/components/ui/NotificationBell";
 
 type StudentDashboardData = {
   student: {
@@ -123,6 +124,7 @@ export default function StudentPage() {
             >
               <RefreshCw size={18} className={loading ? "animate-spin text-blue-400" : ""} />
             </button>
+            <NotificationBell />
             <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-sm shadow-md shadow-blue-500/20">
               {data?.student?.name?.charAt(0) || "S"}
             </div>
