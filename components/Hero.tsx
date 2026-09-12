@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Hero() {
   return (
     <section className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white flex items-center justify-center px-6">
@@ -25,13 +27,13 @@ export default function Hero() {
 
         <div className="mt-10 flex justify-center gap-5">
 
-          <button className="px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:scale-105 duration-300">
+          <Link href="/login" className="px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:scale-105 duration-300 block">
             Get Started
-          </button>
+          </Link>
 
-          <button className="px-8 py-4 rounded-xl border border-gray-700 hover:border-cyan-500 duration-300">
+          <Link href="/login" className="px-8 py-4 rounded-xl border border-gray-700 hover:border-cyan-500 duration-300 block">
             Live Demo
-          </button>
+          </Link>
 
         </div>
 

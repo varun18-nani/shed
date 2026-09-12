@@ -25,7 +25,7 @@ export default function Features() {
   ];
 
   return (
-    <section className="bg-black text-white py-24 px-6">
+    <section id="features" className="bg-black text-white py-24 px-6">
 
       <div className="max-w-6xl mx-auto">
 

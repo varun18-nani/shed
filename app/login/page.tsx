@@ -34,7 +34,16 @@ export default function LoginPage() {
       }
 
       // Login successful
-      window.location.href = "/admin";
+      const role = data.user?.role;
+      if (role === "ADMIN") {
+        window.location.href = "/admin";
+      } else if (role === "FACULTY") {
+        window.location.href = "/faculty";
+      } else if (role === "STUDENT") {
+        window.location.href = "/student";
+      } else {
+        window.location.href = "/admin"; // Fallback just in case
+      }
     } catch (error) {
       console.error("Login request failed:", error);
       setError("Unable to connect to the server");

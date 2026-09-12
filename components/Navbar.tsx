@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 backdrop-blur-xl bg-black/30 border-b border-white/10">
@@ -9,25 +11,17 @@ export default function Navbar() {
 
         <ul className="hidden md:flex items-center gap-8 text-gray-300">
           <li className="hover:text-cyan-400 cursor-pointer transition duration-300">
-            Home
+            <Link href="/">Home</Link>
           </li>
 
           <li className="hover:text-cyan-400 cursor-pointer transition duration-300">
-            Features
-          </li>
-
-          <li className="hover:text-cyan-400 cursor-pointer transition duration-300">
-            Pricing
-          </li>
-
-          <li className="hover:text-cyan-400 cursor-pointer transition duration-300">
-            Contact
+            <Link href="/#features">Features</Link>
           </li>
         </ul>
 
-        <button className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold shadow-lg shadow-cyan-500/30 hover:scale-105 transition">
+        <Link href="/login" className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold shadow-lg shadow-cyan-500/30 hover:scale-105 transition block">
           Login
-        </button>
+        </Link>
 
       </div>
     </nav>
