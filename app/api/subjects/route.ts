@@ -25,6 +25,7 @@ export async function GET() {
           select: {
             id: true,
             employeeId: true,
+            designation: true,
 
             user: {
               select: {
@@ -39,30 +40,28 @@ export async function GET() {
 
     const formattedSubjects = subjects.map((subject) => ({
       id: subject.id,
-
       code: subject.code,
-
       name: subject.name,
-
       credits: subject.credits,
-
       semester: subject.semester,
-
       departmentId: subject.departmentId,
-
-      department: subject.department.name,
-
-      departmentCode: subject.department.code,
-
+      department: {
+        id: subject.department.id,
+        name: subject.department.name,
+        code: subject.department.code,
+      },
       facultyId: subject.facultyId,
-
       faculty: subject.faculty
-        ? `${subject.faculty.user.firstName} ${subject.faculty.user.lastName}`
-        : "Not assigned",
-
-      employeeId:
-        subject.faculty?.employeeId ?? null,
-
+        ? {
+            id: subject.faculty.id,
+            employeeId: subject.faculty.employeeId,
+            designation: subject.faculty.designation,
+            user: {
+              firstName: subject.faculty.user.firstName,
+              lastName: subject.faculty.user.lastName,
+            },
+          }
+        : null,
       createdAt: subject.createdAt,
     }));
 
@@ -297,6 +296,7 @@ export async function POST(request: Request) {
             select: {
               id: true,
               employeeId: true,
+              designation: true,
 
               user: {
                 select: {
@@ -316,34 +316,29 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         id: subject.id,
-
         code: subject.code,
-
         name: subject.name,
-
         credits: subject.credits,
-
         semester: subject.semester,
-
-        departmentId:
-          subject.departmentId,
-
-        department:
-          subject.department.name,
-
-        departmentCode:
-          subject.department.code,
-
-        facultyId:
-          subject.facultyId,
-
+        departmentId: subject.departmentId,
+        department: {
+          id: subject.department.id,
+          name: subject.department.name,
+          code: subject.department.code,
+        },
+        facultyId: subject.facultyId,
         faculty: subject.faculty
-          ? `${subject.faculty.user.firstName} ${subject.faculty.user.lastName}`
-          : "Not assigned",
-
-        employeeId:
-          subject.faculty?.employeeId ??
-          null,
+          ? {
+              id: subject.faculty.id,
+              employeeId: subject.faculty.employeeId,
+              designation: subject.faculty.designation,
+              user: {
+                firstName: subject.faculty.user.firstName,
+                lastName: subject.faculty.user.lastName,
+              },
+            }
+          : null,
+        createdAt: subject.createdAt,
       },
       {
         status: 201,
