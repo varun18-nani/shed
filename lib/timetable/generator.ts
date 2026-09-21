@@ -239,16 +239,29 @@ export async function generateTimetable(input: GenerateInput): Promise<Generator
     // Determine how many tasks were scheduled before failure in a greedy sense 
     // to populate diagnostic data (we don't save it though)
     
+    let errorMessage = "Unable to generate a complete timetable. The available rooms, faculty, sections, and time slots cannot satisfy all scheduling constraints.";
+    let errorReason = "Constraints too tight or insufficient resources";
+
+    const suitableRooms = rooms.filter(r => sectionCapacity === 0 || r.capacity >= sectionCapacity);
+    
+    if (suitableRooms.length === 0) {
+      errorMessage = `Insufficient room capacity: No available room can accommodate the section capacity of ${sectionCapacity}.`;
+      errorReason = "No room with sufficient capacity";
+    } else if (totalPeriods > timeSlots.length) {
+      errorMessage = `Insufficient time slots: Section requires ${totalPeriods} periods, but only ${timeSlots.length} time slots are available.`;
+      errorReason = "Required periods exceed available time slots";
+    }
+
     return {
       success: false,
       diagnostics: {
-        error: "Unable to generate a complete timetable with the available rooms and time slots.",
+        error: errorMessage,
         requiredPeriods: totalPeriods,
         scheduledPeriods: currentAssignments.length, // This will be 0 due to backtrack, but let's provide metadata
         availableTimeSlots: timeSlots.length,
         availableRooms: rooms.length,
         failedTask: tasks[0], // Simplified diagnostic
-        reason: "Constraints too tight or insufficient resources"
+        reason: errorReason
       }
     };
   }
