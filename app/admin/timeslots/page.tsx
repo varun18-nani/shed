@@ -224,9 +224,11 @@ export default function TimeSlotsPage() {
         throw new Error(data.error || "Failed to copy time slots.");
       }
 
-      setSuccess(
-        `Successfully copied ${DAY_MAPPING[activeDay]}'s slots to ${copyTargetDays.length} other day(s).`
-      );
+      let successMessage = `Successfully processed slots. Inserted: ${data.insertedCount}.`;
+      if (data.skippedCount > 0) {
+        successMessage += ` Skipped ${data.skippedCount} slots (Duplicates: ${data.skippedDuplicates}, Overlaps: ${data.skippedOverlaps}).`;
+      }
+      setSuccess(successMessage);
       setShowCopyModal(false);
       await loadTimeSlots();
     } catch (err) {

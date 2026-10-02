@@ -22,8 +22,9 @@
     "test:health": "tsx scripts/test-health.ts",
     "test:notifications": "tsx scripts/test-notifications.ts",
     "test:pdf-export": "tsx scripts/test-pdf-export.ts",
+    "test:time-slots": "tsx scripts/test-time-slots.ts",
     "check:production": "tsx scripts/check-production.ts",
-    "test:all": "tsx scripts/test-generator.ts && tsx scripts/test-publishing.ts && tsx scripts/test-portal-timetable.ts && tsx scripts/test-dashboard.ts && tsx scripts/test-security.ts && tsx scripts/test-timetable-intelligence.ts && tsx scripts/test-optimization.ts && tsx scripts/test-health.ts && tsx scripts/test-notifications.ts && tsx scripts/test-pdf-export.ts"
+    "test:all": "tsx scripts/test-generator.ts && tsx scripts/test-publishing.ts && tsx scripts/test-portal-timetable.ts && tsx scripts/test-dashboard.ts && tsx scripts/test-security.ts && tsx scripts/test-timetable-intelligence.ts && tsx scripts/test-optimization.ts && tsx scripts/test-health.ts && tsx scripts/test-notifications.ts && tsx scripts/test-pdf-export.ts && tsx scripts/test-time-slots.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",

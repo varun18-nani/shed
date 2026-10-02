@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { hasTimeOverlap } from "@/lib/timeUtils";
 
 export interface GenerateInput {
   departmentId: string;
@@ -78,15 +79,40 @@ export async function generateTimetable(input: GenerateInput): Promise<Generator
     include: { timeSlot: true }
   });
 
-  const occupiedFaculty = new Set<string>();
-  const occupiedRoom = new Set<string>();
-  const occupiedSection = new Set<string>();
+  const occupiedFaculty: Record<string, any[]> = {};
+  const occupiedRoom: Record<string, any[]> = {};
+  const occupiedSection: Record<string, any[]> = {};
+
+  const addOccupied = (map: Record<string, any[]>, id: string, slot: any) => {
+    const key = `${id}_${slot.dayOfWeek}`;
+    if (!map[key]) map[key] = [];
+    map[key].push(slot);
+  };
+
+  const removeOccupied = (map: Record<string, any[]>, id: string, slot: any) => {
+    const key = `${id}_${slot.dayOfWeek}`;
+    if (map[key]) {
+      map[key] = map[key].filter(s => s.id !== slot.id);
+    }
+  };
+
+  const isOccupied = (map: Record<string, any[]>, id: string, slot: any) => {
+    const key = `${id}_${slot.dayOfWeek}`;
+    if (!map[key]) return false;
+    for (const existing of map[key]) {
+      if (hasTimeOverlap(slot.startTime, slot.endTime, existing.startTime, existing.endTime)) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   for (const entry of existingEntries) {
-    occupiedFaculty.add(`${entry.facultyId}_${entry.timeSlotId}`);
-    occupiedRoom.add(`${entry.roomId}_${entry.timeSlotId}`);
+    if (!entry.timeSlot) continue;
+    addOccupied(occupiedFaculty, entry.facultyId, entry.timeSlot);
+    addOccupied(occupiedRoom, entry.roomId, entry.timeSlot);
     if (entry.sectionId) {
-      occupiedSection.add(`${entry.sectionId}_${entry.timeSlotId}`);
+      addOccupied(occupiedSection, entry.sectionId, entry.timeSlot);
     }
   }
 
@@ -168,13 +194,13 @@ export async function generateTimetable(input: GenerateInput): Promise<Generator
 
     for (const slot of timeSlots) {
       // Hard Constraint: Faculty available
-      if (occupiedFaculty.has(`${task.facultyId}_${slot.id}`)) continue;
+      if (isOccupied(occupiedFaculty, task.facultyId, slot)) continue;
       // Hard Constraint: Section available
-      if (occupiedSection.has(`${sectionId}_${slot.id}`)) continue;
+      if (isOccupied(occupiedSection, sectionId, slot)) continue;
 
       for (const room of rooms) {
         // Hard Constraint: Room available
-        if (occupiedRoom.has(`${room.id}_${slot.id}`)) continue;
+        if (isOccupied(occupiedRoom, room.id, slot)) continue;
         // Hard Constraint: Room capacity
         if (sectionCapacity > 0 && room.capacity < sectionCapacity) continue;
 
@@ -192,9 +218,9 @@ export async function generateTimetable(input: GenerateInput): Promise<Generator
       const { slot, room } = cand;
 
       // Apply
-      occupiedFaculty.add(`${task.facultyId}_${slot.id}`);
-      occupiedSection.add(`${sectionId}_${slot.id}`);
-      occupiedRoom.add(`${room.id}_${slot.id}`);
+      addOccupied(occupiedFaculty, task.facultyId, slot);
+      addOccupied(occupiedSection, sectionId, slot);
+      addOccupied(occupiedRoom, room.id, slot);
 
       const dayKey = `${sectionId}_${slot.dayOfWeek}`;
       const isNewSubjectOnDay = !(sectionSubjectsPerDay[dayKey]?.has(task.subjectId));
@@ -218,9 +244,9 @@ export async function generateTimetable(input: GenerateInput): Promise<Generator
       }
 
       // Backtrack
-      occupiedFaculty.delete(`${task.facultyId}_${slot.id}`);
-      occupiedSection.delete(`${sectionId}_${slot.id}`);
-      occupiedRoom.delete(`${room.id}_${slot.id}`);
+      removeOccupied(occupiedFaculty, task.facultyId, slot);
+      removeOccupied(occupiedSection, sectionId, slot);
+      removeOccupied(occupiedRoom, room.id, slot);
       
       if (isNewSubjectOnDay) {
         sectionSubjectsPerDay[dayKey].delete(task.subjectId);

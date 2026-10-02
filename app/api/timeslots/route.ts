@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { hasTimeOverlap, isStartTimeBeforeEndTime } from "@/lib/timeUtils";
 
 // ============================================================
 // GET — FETCH ALL TIME SLOTS
@@ -58,12 +59,12 @@ export async function POST(request: Request) {
     if (
       !Number.isInteger(dayOfWeek) ||
       dayOfWeek < 1 ||
-      dayOfWeek > 7
+      dayOfWeek > 6
     ) {
       return NextResponse.json(
         {
           error:
-            "Day of week must be between 1 and 7",
+            "Day of week must be between 1 and 6",
         },
         {
           status: 400,
@@ -107,14 +108,15 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------------
+    // --------------------------------------------------------
     // START MUST BE BEFORE END
     // --------------------------------------------------------
 
-    if (startTime >= endTime) {
+    if (!isStartTimeBeforeEndTime(startTime, endTime)) {
       return NextResponse.json(
         {
           error:
-            "Start time must be before end time",
+            "Start time must be strictly before end time",
         },
         {
           status: 400,
@@ -123,30 +125,24 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------------
-    // CHECK DUPLICATE
+    // CHECK OVERLAP
     // --------------------------------------------------------
 
-    const existingTimeSlot =
-      await prisma.timeSlot.findUnique({
-        where: {
-          dayOfWeek_startTime_endTime: {
-            dayOfWeek,
-            startTime,
-            endTime,
-          },
-        },
-      });
+    const existingTimeSlots = await prisma.timeSlot.findMany({
+      where: { dayOfWeek }
+    });
 
-    if (existingTimeSlot) {
-      return NextResponse.json(
-        {
-          error:
-            "This time slot already exists",
-        },
-        {
-          status: 409,
-        }
-      );
+    for (const slot of existingTimeSlots) {
+      if (hasTimeOverlap(startTime, endTime, slot.startTime, slot.endTime)) {
+        const isDuplicate = startTime === slot.startTime && endTime === slot.endTime;
+        const msg = isDuplicate 
+          ? "This exact time slot already exists on this day."
+          : `This time slot overlaps with an existing slot: ${slot.startTime}-${slot.endTime} on this day.`;
+        return NextResponse.json(
+          { error: msg },
+          { status: 409 }
+        );
+      }
     }
 
     // --------------------------------------------------------
