@@ -124,9 +124,10 @@ export default function TimetablePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Lifecycle states (Publish / Archive)
+  // Lifecycle states (Publish / Archive / Discard)
   const [isPublishing, setIsPublishing] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     type: "publish" | "archive";
     sectionId: string;
@@ -489,6 +490,44 @@ export default function TimetablePage() {
       setError(err.message);
     } finally {
       setIsArchiving(false);
+    }
+  }
+
+  // ── Discard Draft Action Handler ─────────────
+  async function handleDiscardDraft(secId: string, yr: string, sectionName: string) {
+    const confirmed = window.confirm(
+  `Discard the DRAFT timetable for "${sectionName}" (${yr})?\n\n` +
+  `This will permanently delete all ${sectionLifecycleState?.count ?? 0} draft period entries for this section and academic year.\n\n` +
+  `Subjects, faculty, rooms, sections, and time slots will NOT be deleted — only the generated schedule entries will be removed.\n\n` +
+  `This action cannot be undone.`
+);
+    if (!confirmed) return;
+
+    setIsDiscarding(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch("/api/timetable/discard", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId: secId,
+          academicYear: yr,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to discard draft timetable");
+      }
+
+      setSuccess(`Draft timetable discarded successfully (${data.deletedCount} entries removed).`);
+      const entriesRes = await fetch("/api/timetable");
+      if (entriesRes.ok) setEntries(await entriesRes.json());
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsDiscarding(false);
     }
   }
 
@@ -1059,6 +1098,20 @@ export default function TimetablePage() {
               <div className="flex items-center gap-2.5">
                 {sectionLifecycleState.overallStatus === "DRAFT" && (
                   <>
+                    <button
+                      onClick={() =>
+                        handleDiscardDraft(
+                          sectionLifecycleState!.sectionId,
+                          sectionLifecycleState!.academicYear,
+                          sectionLifecycleState!.sectionName
+                        )
+                      }
+                      disabled={isDiscarding}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-500/30 font-semibold text-xs text-red-400 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 size={13} className="text-red-400" />
+                      <span>{isDiscarding ? "Discarding..." : "Discard Draft"}</span>
+                    </button>
                     <button
                       onClick={() => {
                         const sec = sections.find((s) => s.id === sectionLifecycleState.sectionId);
